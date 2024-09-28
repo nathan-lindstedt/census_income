@@ -5,17 +5,18 @@ import joblib
 import os
 
 import kmapper as km
-import pandas as pd
 import numpy as np
-import xgboost as xgb
+import pandas as pd
+import gower
 import sklearn
 
-from ucimlrepo import fetch_ucirepo
-from sklearn.experimental import enable_halving_search_cv
+from sklearn.cluster import AgglomerativeClustering
 from sklearn.compose import make_column_transformer
-from sklearn.metrics import accuracy_score, balanced_accuracy_score, precision_score, recall_score, confusion_matrix, roc_auc_score, roc_curve
+from sklearn.experimental import enable_halving_search_cv
+from sklearn.metrics import precision_score, recall_score, roc_auc_score
 from sklearn.model_selection import HalvingGridSearchCV, GridSearchCV, train_test_split
 from sklearn.preprocessing import OneHotEncoder
+from ucimlrepo import fetch_ucirepo
 from xgboost import XGBClassifier
 
 #%%
@@ -27,7 +28,7 @@ y_feat_names: list = []
 # XGBoost hyperparameter initialization
 min_child_weight: int = 8
 max_bin: int = 48
-num_parallel_tree: int = 48
+num_parallel_tree: int = 64
 subsample: float = 0.8
 colsample_bytree: float = 0.8
 colsample_bynode: float = 0.8
@@ -103,7 +104,7 @@ if not os.path.isfile(f'./census_income_xgb_model_v{sklearn.__version__}.pkl'):
     xgbrf_stop = time.perf_counter()
 
     xgbrf_model = XGBClassifier(tree_method='hist', grow_policy='depthwise', early_stopping_rounds=20, min_child_weight=min_child_weight, max_bin=max_bin, num_parallel_tree=num_parallel_tree, subsample=subsample, colsample_bytree=colsample_bytree, colsample_bynode=colsample_bynode, scale_pos_weight=xgbrf_class_weight, 
-                                eval_metric='logloss', **xgbrf_gridsearch.best_params_, n_jobs=-1).fit(np.array(X_train), np.array(y_train), eval_set=[(np.array(X_val), np.array(y_val))])
+                                eval_metric='logloss', **xgbrf_gridsearch.best_params_).fit(np.array(X_train), np.array(y_train), eval_set=[(np.array(X_val), np.array(y_val))])
 
     print(f'XGBoost Random Forest model trained in {(xgbrf_stop - xgbrf_start)/60:.1f} minutes')
     print(f'Best XGBost Random Forest parameters: {xgbrf_gridsearch.best_params_}')
@@ -118,18 +119,22 @@ else:
 xgbrf_train_probs = xgbrf_model.predict_proba(X_train)
 xgbrf_train_probs = xgbrf_train_probs[:, 1]
 xgbrf_train_prec = precision_score(y_train, xgbrf_model.predict(X_train))
+xgbrf_train_recall = recall_score(y_train, xgbrf_model.predict(X_train))
 xgbrf_train_auc = roc_auc_score(y_train, xgbrf_train_probs)
 
 xgbrf_val_probs = xgbrf_model.predict_proba(X_val)
 xgbrf_val_probs = xgbrf_val_probs[:, 1]
 xgbrf_val_prec = precision_score(y_val, xgbrf_model.predict(X_val))
+xgbrf_val_recall = recall_score(y_val, xgbrf_model.predict(X_val))
 xgbrf_val_auc = roc_auc_score(y_val, xgbrf_val_probs)
 
 print(f'Overall accuracy for XGBoost Random Forest model (training): {xgbrf_model.score(X_train, y_train):.4f}')
 print(f'Overall precision for XGBoost Random Forest model (training): {xgbrf_train_prec:.4f}')
+print(f'Overall recall for XGBoost Random Forest model (training): {xgbrf_train_recall:.4f}')
 print(f'ROC AUC for XGBoost Random Forest model (training): {xgbrf_train_auc:.4f}\n')
 print(f'Overall accuracy for XGBoost Random Forest model (validation): {xgbrf_model.score(X_val, y_val):.4f}')
 print(f'Overall precision for XGBoost Random Forest model (validation): {xgbrf_val_prec:.4f}')
+print(f'Overall recall for XGBoost Random Forest model (validation): {xgbrf_val_recall:.4f}')
 print(f'ROC AUC for XGBoost Random Forest model (validation): {xgbrf_val_auc:.4f}\n')
 
 #%%
@@ -143,12 +148,16 @@ lens_2 = mapper.fit_transform(X_train, projection='l2norm')
 lenses = np.c_[lens_1, lens_2]
 
 #%%
+X_train_gower = gower.gower_matrix(X_train)
+
+#%%
 # Create the Kepler Mapper graph
 graph = mapper.map(
     lenses,
-    X_train,
-    cover=km.Cover(n_cubes=20, perc_overlap=0.10),
-    clusterer=sklearn.cluster.AgglomerativeClustering(metric='cosine', linkage='average', n_clusters=2)
+    X_train_gower,
+    cover=km.Cover(n_cubes=20, perc_overlap=.10),
+    clusterer=AgglomerativeClustering(metric='precomputed', linkage='average', n_clusters=2),
+    precomputed=True
 )
 
 #%%
