@@ -15,13 +15,16 @@ from sklearn.compose import make_column_transformer
 from sklearn.experimental import enable_halving_search_cv
 from sklearn.metrics import precision_score, recall_score, roc_auc_score
 from sklearn.model_selection import HalvingGridSearchCV, GridSearchCV, train_test_split
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder, StandardScaler, LabelEncoder
 from ucimlrepo import fetch_ucirepo
 from xgboost import XGBClassifier
+
+from census_income import pca
 
 #%%
 # Global variable initialization
 X_feat_names: list = []
+X_label_names: list = []
 y_feat_names: list = []
 
 #%%
@@ -52,7 +55,7 @@ y_import = pd.DataFrame(y_import['income'].str.replace('.',''))
 X_hot_vars = X_import.select_dtypes(include='object').columns.tolist()
 
 X_prep = make_column_transformer(
-    (OneHotEncoder(drop='first', sparse_output=False), X_hot_vars),
+    (OneHotEncoder(drop='first', min_frequency=100, max_categories=8, sparse_output=False), X_hot_vars),
     remainder='passthrough'
 )
 
@@ -73,6 +76,36 @@ for name, transformer, features, _ in X_prep._iter(fitted=True, column_as_labels
 X = pd.DataFrame(X, columns=X_feat_names)
 
 #%%
+# Logistic PCA for categorical variables
+# for label in [label for label in X_hot_vars if label != 'sex']:
+for label in X_hot_vars:
+    mu = pca.logistic_pca(X.loc[:, X.columns.str.startswith(label)].to_numpy(), num_iter=50)[1]
+    X.drop(X.loc[:, X.columns.str.startswith(label)], inplace=True, axis=1)
+    X[label] = mu[0].reshape(-1,1)
+
+#%%
+X_post = make_column_transformer(
+    (StandardScaler(), X_hot_vars),
+    remainder='passthrough'
+)
+
+X = X_post.fit_transform(X)
+
+#%%
+# Feature names
+for name, transformer, features, _ in X_post._iter(fitted=True, column_as_labels=True, skip_drop=True, skip_empty_columns=True):
+    if transformer != 'passthrough':
+        try:
+            X_label_names.extend(X_post.named_transformers_[name].get_feature_names_out())
+        except AttributeError:
+            X_label_names.extend(features)
+            
+    if transformer == 'passthrough':
+        X_label_names.extend(X_post._feature_names_in[features])
+
+X = pd.DataFrame(X, columns=X_label_names)
+
+#%%
 # Y variable one-hot encoding
 y_prep = OneHotEncoder(drop='first', sparse_output=False)
 y_feat_names = y_import.columns.tolist()
@@ -91,7 +124,7 @@ xgbrf_class_weight = float(count_0 / count_1)
 
 #%%
 # XGBoost Random Forest tuning and training
-if not os.path.isfile(f'./census_income_xgb_model_v{sklearn.__version__}.pkl'):
+if not os.path.isfile(f'../census_income_xgb_model_v{sklearn.__version__}.pkl'):
     xgbrf_hyperparameters = [{'max_depth': np.linspace(1, 16, 16, dtype=int, endpoint=True),
                             'gamma': np.linspace(1, 16, 16, dtype=int, endpoint=True),
                             'learning_rate': [0.01, 0.5, 1.0]}]
@@ -109,10 +142,10 @@ if not os.path.isfile(f'./census_income_xgb_model_v{sklearn.__version__}.pkl'):
     print(f'XGBoost Random Forest model trained in {(xgbrf_stop - xgbrf_start)/60:.1f} minutes')
     print(f'Best XGBost Random Forest parameters: {xgbrf_gridsearch.best_params_}')
 
-    joblib.dump(xgbrf_model, f'census_income_xgb_model_v{sklearn.__version__}.pkl')
+    joblib.dump(xgbrf_model, f'../census_income_xgb_model_v{sklearn.__version__}.pkl')
 
 else:
-    xgbrf_model = joblib.load(f'census_income_xgb_model_v{sklearn.__version__}.pkl')
+    xgbrf_model = joblib.load(f'../census_income_xgb_model_v{sklearn.__version__}.pkl')
 
 #%%
 # XGBoost Random Forest metrics
@@ -148,28 +181,30 @@ lens_2 = mapper.fit_transform(X_train, projection='l2norm')
 lenses = np.c_[lens_1, lens_2]
 
 #%%
-X_train_gower = gower.gower_matrix(X_train)
+# X_train_gower = gower.gower_matrix(X_train)
 
 #%%
 # Create the Kepler Mapper graph
 graph = mapper.map(
     lenses,
-    X_train_gower,
+    X_train,
+    # X_train_gower,
     cover=km.Cover(n_cubes=20, perc_overlap=.10),
-    clusterer=AgglomerativeClustering(metric='precomputed', linkage='average', n_clusters=2),
-    precomputed=True
+    # clusterer=AgglomerativeClustering(metric='precomputed', linkage='average', n_clusters=2),
+    clusterer=AgglomerativeClustering(metric='l2', linkage='average', n_clusters=2)
+    # precomputed=True
 )
 
 #%%
 # Visualize the Kepler Mapper graph by target variable
 mapper.visualize(
     graph,
-    path_html="census-income-training-targets.html",
+    path_html="../census-income-training-targets.html",
     title="Census Income",
     custom_tooltips=np.array(y_train[0]),
     color_values=lenses,
     X=np.array(X_train),
-    X_names=X_feat_names,
+    X_names=X_label_names,
     color_function_name=["XGBoost Random Forest", "L2-norm"],
     node_color_function=["mean", "median"]
 )
@@ -178,12 +213,12 @@ mapper.visualize(
 # Visualize the Kepler Mapper graph by misses
 mapper.visualize(
     graph,
-    path_html="census-income-training-misses.html",
+    path_html="../census-income-training-misses.html",
     title="Census Income",
     custom_tooltips=np.array(abs(y_train[0] - xgbrf_model.predict(X_train))),
     color_values=lenses,
     X=np.array(X_train),
-    X_names=X_feat_names,
+    X_names=X_label_names,
     color_function_name=["XGBoost Random Forest", "L2-norm"],
     node_color_function=["mean", "median"]
 )
