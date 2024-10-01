@@ -43,6 +43,7 @@ def logistic_pca(X, num_components=None, num_iter=50):
     Tipping, Michael E. "Probabilistic visualisation of high-dimensional binary data." 
     Advances in neural information processing systems (1999): 592-598.
 
+    Copyright (c) 2021 Mikael Brudfors
     """
     num_samples = X.shape[0]
     num_dimensions = X.shape[1]
@@ -143,6 +144,7 @@ def pca(X, num_components=None, zero_mean=True):
     mu : (num_components, ) ndarray
         Principal components.    
 
+    Copyright (c) 2021 Mikael Brudfors
     """
     num_samples = X.shape[0]
     num_dimensions = X.shape[1]
