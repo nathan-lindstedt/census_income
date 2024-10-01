@@ -66,7 +66,6 @@ X = helper_funcs.feature_names(X_feat_names, X_prep, X)
 
 #%%
 # Logistic PCA for categorical variables
-# for label in [label for label in X_hot_vars if label != 'sex']:
 for label in X_hot_vars:
     mu = helper_funcs.logistic_pca(X.loc[:, X.columns.str.startswith(label)].to_numpy(), num_iter=50)[1]
     X.drop(X.loc[:, X.columns.str.startswith(label)], inplace=True, axis=1)
