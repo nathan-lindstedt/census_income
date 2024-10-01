@@ -164,7 +164,7 @@ graph = mapper.map(
 # Visualize the Kepler Mapper graph by target variable
 mapper.visualize(
     graph,
-    path_html="census-income-training-targets.html",
+    path_html="census-income-xgb-train-targets.html",
     title="Census Income",
     custom_tooltips=np.array(y_train[0]),
     color_values=lenses,
@@ -178,7 +178,7 @@ mapper.visualize(
 # Visualize the Kepler Mapper graph by misses
 mapper.visualize(
     graph,
-    path_html="census-income-training-misses.html",
+    path_html="census-income-xgb-train-misses.html",
     title="Census Income",
     custom_tooltips=np.array(abs(y_train[0] - xgbrf_model.predict(X_train))),
     color_values=lenses,
