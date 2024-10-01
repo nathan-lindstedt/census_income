@@ -103,7 +103,7 @@ xgbrf_class_weight = float(count_0 / count_1)
 
 #%%
 # XGBoost Random Forest tuning and training
-if not os.path.isfile(f'../census_income_xgb_model_v{sklearn.__version__}.pkl'):
+if not os.path.isfile(f'../census_income_pca_model_v{sklearn.__version__}.pkl'):
     xgbrf_hyperparameters = [{'max_depth': np.linspace(1, 16, 16, dtype=int, endpoint=True),
                             'gamma': np.linspace(1, 16, 16, dtype=int, endpoint=True),
                             'learning_rate': [0.01, 0.5, 1.0]}]
@@ -121,10 +121,10 @@ if not os.path.isfile(f'../census_income_xgb_model_v{sklearn.__version__}.pkl'):
     print(f'XGBoost Random Forest model trained in {(xgbrf_stop - xgbrf_start)/60:.1f} minutes')
     print(f'Best XGBost Random Forest parameters: {xgbrf_gridsearch.best_params_}')
 
-    joblib.dump(xgbrf_model, f'../census_income_xgb_model_v{sklearn.__version__}.pkl')
+    joblib.dump(xgbrf_model, f'../census_income_pca_model_v{sklearn.__version__}.pkl')
 
 else:
-    xgbrf_model = joblib.load(f'../census_income_xgb_model_v{sklearn.__version__}.pkl')
+    xgbrf_model = joblib.load(f'../census_income_pca_model_v{sklearn.__version__}.pkl')
 
 #%%
 # XGBoost Random Forest metrics
