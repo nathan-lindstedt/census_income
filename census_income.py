@@ -109,10 +109,10 @@ if not os.path.isfile(f'./census_income_xgb_model_v{sklearn.__version__}.pkl'):
     print(f'XGBoost Random Forest model trained in {(xgbrf_stop - xgbrf_start)/60:.1f} minutes')
     print(f'Best XGBost Random Forest parameters: {xgbrf_gridsearch.best_params_}')
 
-    joblib.dump(xgbrf_model, f'census_income_xgb_model_v{sklearn.__version__}.pkl')
+    joblib.dump(xgbrf_model, f'./census_income_xgb_model_v{sklearn.__version__}.pkl')
 
 else:
-    xgbrf_model = joblib.load(f'census_income_xgb_model_v{sklearn.__version__}.pkl')
+    xgbrf_model = joblib.load(f'./census_income_xgb_model_v{sklearn.__version__}.pkl')
 
 #%%
 # XGBoost Random Forest metrics
