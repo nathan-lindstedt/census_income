@@ -14,7 +14,7 @@ from sklearn.compose import make_column_transformer
 from sklearn.experimental import enable_halving_search_cv
 from sklearn.metrics import precision_score, recall_score, roc_auc_score
 from sklearn.model_selection import HalvingGridSearchCV, GridSearchCV, train_test_split
-from sklearn.preprocessing import OneHotEncoder, StandardScaler, LabelEncoder
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from ucimlrepo import fetch_ucirepo
 from xgboost import XGBClassifier
 
@@ -23,8 +23,8 @@ from census_income import helper_funcs
 #%%
 # Global variable initialization
 X_feat_names: list = []
-X_label_names: list = []
 y_feat_names: list = []
+X_label_names: list = []
 
 #%%
 # XGBoost hyperparameter initialization
@@ -83,7 +83,7 @@ X = X_post.fit_transform(X)
 
 #%%
 # Feature names
-X = helper_funcs.feature_names(X_feat_names, X_post, X)
+X = helper_funcs.feature_names(X_label_names, X_post, X)
 
 #%%
 # Y variable one-hot encoding
