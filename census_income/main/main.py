@@ -7,7 +7,6 @@ import os
 import kmapper as km
 import numpy as np
 import pandas as pd
-import gower
 import sklearn
 
 from sklearn.cluster import AgglomerativeClustering
@@ -19,7 +18,7 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler, LabelEncoder
 from ucimlrepo import fetch_ucirepo
 from xgboost import XGBClassifier
 
-from census_income import pca
+from census_income import helper_funcs
 
 #%%
 # Global variable initialization
@@ -63,27 +62,18 @@ X = X_prep.fit_transform(X_import)
 
 #%%
 # Feature names
-for name, transformer, features, _ in X_prep._iter(fitted=True, column_as_labels=True, skip_drop=True, skip_empty_columns=True):
-    if transformer != 'passthrough':
-        try:
-            X_feat_names.extend(X_prep.named_transformers_[name].get_feature_names_out())
-        except AttributeError:
-            X_feat_names.extend(features)
-            
-    if transformer == 'passthrough':
-        X_feat_names.extend(X_prep._feature_names_in[features])
-
-X = pd.DataFrame(X, columns=X_feat_names)
+X = helper_funcs.feature_names(X_feat_names, X_prep, X)
 
 #%%
 # Logistic PCA for categorical variables
 # for label in [label for label in X_hot_vars if label != 'sex']:
 for label in X_hot_vars:
-    mu = pca.logistic_pca(X.loc[:, X.columns.str.startswith(label)].to_numpy(), num_iter=50)[1]
+    mu = helper_funcs.logistic_pca(X.loc[:, X.columns.str.startswith(label)].to_numpy(), num_iter=50)[1]
     X.drop(X.loc[:, X.columns.str.startswith(label)], inplace=True, axis=1)
     X[label] = mu[0].reshape(-1,1)
 
 #%%
+# X variable standard scaling
 X_post = make_column_transformer(
     (StandardScaler(), X_hot_vars),
     remainder='passthrough'
@@ -93,17 +83,7 @@ X = X_post.fit_transform(X)
 
 #%%
 # Feature names
-for name, transformer, features, _ in X_post._iter(fitted=True, column_as_labels=True, skip_drop=True, skip_empty_columns=True):
-    if transformer != 'passthrough':
-        try:
-            X_label_names.extend(X_post.named_transformers_[name].get_feature_names_out())
-        except AttributeError:
-            X_label_names.extend(features)
-            
-    if transformer == 'passthrough':
-        X_label_names.extend(X_post._feature_names_in[features])
-
-X = pd.DataFrame(X, columns=X_label_names)
+X = helper_funcs.feature_names(X_feat_names, X_post, X)
 
 #%%
 # Y variable one-hot encoding
@@ -181,18 +161,12 @@ lens_2 = mapper.fit_transform(X_train, projection='l2norm')
 lenses = np.c_[lens_1, lens_2]
 
 #%%
-# X_train_gower = gower.gower_matrix(X_train)
-
-#%%
 # Create the Kepler Mapper graph
 graph = mapper.map(
     lenses,
     X_train,
-    # X_train_gower,
     cover=km.Cover(n_cubes=20, perc_overlap=.10),
-    # clusterer=AgglomerativeClustering(metric='precomputed', linkage='average', n_clusters=2),
     clusterer=AgglomerativeClustering(metric='l2', linkage='average', n_clusters=2)
-    # precomputed=True
 )
 
 #%%

@@ -1,6 +1,21 @@
 import numpy as np
+import pandas as pd
 from numpy.linalg import (inv, solve)
 from numpy import matmul as mm
+
+def feature_names(X_feat_names, X_prep, X):
+    for name, transformer, features, _ in X_prep._iter(fitted=True, column_as_labels=True, skip_drop=True, skip_empty_columns=True):
+        if transformer != 'passthrough':
+            try:
+                X_feat_names.extend(X_prep.named_transformers_[name].get_feature_names_out())
+            except AttributeError:
+                X_feat_names.extend(features)
+            
+        if transformer == 'passthrough':
+            X_feat_names.extend(X_prep._feature_names_in[features])
+
+    return pd.DataFrame(X, columns=X_feat_names)
+
 
 def logistic_pca(X, num_components=None, num_iter=50):
     """Logistic principal component analysis (PCA).
@@ -160,5 +175,4 @@ def _get_num_components(num_components, num_samples, num_dimensions):
     if num_components is None:
         num_components = min(num_samples, num_dimensions)    
 
-    return num_components    
-# %%
+    return num_components
