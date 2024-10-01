@@ -3,18 +3,18 @@ import pandas as pd
 from numpy.linalg import (inv, solve)
 from numpy import matmul as mm
 
-def feature_names(X_feat_names, X_prep, X):
-    for name, transformer, features, _ in X_prep._iter(fitted=True, column_as_labels=True, skip_drop=True, skip_empty_columns=True):
+def feature_names(X_names_list, X_transformer, X):
+    for name, transformer, features, _ in X_transformer._iter(fitted=True, column_as_labels=True, skip_drop=True, skip_empty_columns=True):
         if transformer != 'passthrough':
             try:
-                X_feat_names.extend(X_prep.named_transformers_[name].get_feature_names_out())
+                X_names_list.extend(X_transformer.named_transformers_[name].get_feature_names_out())
             except AttributeError:
-                X_feat_names.extend(features)
+                X_names_list.extend(features)
             
         if transformer == 'passthrough':
-            X_feat_names.extend(X_prep._feature_names_in[features])
+            X_names_list.extend(X_transformer._feature_names_in[features])
 
-    return pd.DataFrame(X, columns=X_feat_names)
+    return pd.DataFrame(X, columns=X_names_list)
 
 
 def logistic_pca(X, num_components=None, num_iter=50):
