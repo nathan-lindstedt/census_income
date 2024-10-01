@@ -61,7 +61,7 @@ X_prep = make_column_transformer(
 X = X_prep.fit_transform(X_import)
 
 #%%
-# Feature names
+# One-hot encoding feature names
 X = helper_funcs.feature_names(X_feat_names, X_prep, X)
 
 #%%
@@ -81,7 +81,7 @@ X_post = make_column_transformer(
 X = X_post.fit_transform(X)
 
 #%%
-# Feature names
+# Standard scaling feature names
 X = helper_funcs.feature_names(X_label_names, X_post, X)
 
 #%%
