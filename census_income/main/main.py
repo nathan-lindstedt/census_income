@@ -1,8 +1,9 @@
 #%%
 # Import libraries
-import time
 import joblib
 import os
+import time
+from typing import List
 
 import kmapper as km
 import numpy as np
@@ -14,15 +15,21 @@ from sklearn.cluster import AgglomerativeClustering
 from sklearn.compose import make_column_transformer
 from sklearn.experimental import enable_halving_search_cv
 from sklearn.metrics import precision_score, recall_score, roc_auc_score
-from sklearn.model_selection import HalvingGridSearchCV, GridSearchCV, train_test_split
+from sklearn.model_selection import HalvingGridSearchCV, train_test_split
 from sklearn.preprocessing import OneHotEncoder
 from ucimlrepo import fetch_ucirepo
 from xgboost import XGBClassifier
 
+from census_income import helper_funcs
+
+#%%
+# System path variables
+start: str = os.path.dirname(__file__)
+
 #%%
 # Global variable initialization
-X_feat_names: list = []
-y_feat_names: list = []
+X_feat_names: List[str] = []
+y_feat_names: List[str] = []
 
 #%%
 # XGBoost hyperparameter initialization
@@ -59,18 +66,8 @@ X_prep = make_column_transformer(
 X = X_prep.fit_transform(X_import)
 
 #%%
-# Feature names
-for name, transformer, features, _ in X_prep._iter(fitted=True, column_as_labels=True, skip_drop=True, skip_empty_columns=True):
-    if transformer != 'passthrough':
-        try:
-            X_feat_names.extend(X_prep.named_transformers_[name].get_feature_names_out())
-        except AttributeError:
-            X_feat_names.extend(features)
-            
-    if transformer == 'passthrough':
-        X_feat_names.extend(X_prep._feature_names_in[features])
-
-X = pd.DataFrame(X, columns=X_feat_names)
+# One-hot encoding feature names
+X = helper_funcs.feature_names(X_feat_names, X_prep, X)
 
 #%%
 # Y variable one-hot encoding
@@ -91,64 +88,119 @@ xgbrf_class_weight = float(count_0 / count_1)
 
 #%%
 # XGBoost Random Forest tuning and training
-if not os.path.isfile(f'./census_income_xgb_model_v{sklearn.__version__}.pkl'):
-    xgbrf_hyperparameters = [{'max_depth': np.linspace(1, 16, 16, dtype=int, endpoint=True),
-                            'gamma': np.linspace(1, 16, 16, dtype=int, endpoint=True),
-                            'learning_rate': [0.01, 0.5, 1.0]}]
+if not os.path.isfile(os.path.relpath(f'../../census_income_xgb_model_v{sklearn.__version__}.pkl', start=start)):
+    xgbrf_hyperparameters = [
+        {
+            'max_depth': np.linspace(1, 16, 16, dtype=int, endpoint=True),
+            'gamma': np.linspace(1, 16, 16, dtype=int, endpoint=True),
+            'learning_rate': [0.01, 0.5, 1.0]
+        }
+    ]
 
     xgbrf_start = time.perf_counter()
 
-    xgbrf_gridsearch = HalvingGridSearchCV(XGBClassifier(tree_method='hist', grow_policy='depthwise', min_child_weight=min_child_weight, max_bin=max_bin, num_parallel_tree=num_parallel_tree, subsample=subsample, colsample_bytree=colsample_bytree, colsample_bynode=colsample_bynode, scale_pos_weight=xgbrf_class_weight, eval_metric='logloss'), xgbrf_hyperparameters, resource='n_estimators', factor=3, min_resources=2, max_resources=500, scoring='roc_auc', cv=3, aggressive_elimination=True, verbose=verbose)
-    xgbrf_best_model = xgbrf_gridsearch.fit(np.array(X_train), np.array(y_train), eval_set=[(np.array(X_val), np.array(y_val))], verbose=False)
+    xgbrf_gridsearch = HalvingGridSearchCV(
+        XGBClassifier(
+            tree_method='hist',
+            grow_policy='depthwise',
+            min_child_weight=min_child_weight,
+            max_bin=max_bin,
+            num_parallel_tree=num_parallel_tree,
+            subsample=subsample,
+            colsample_bytree=colsample_bytree,
+            colsample_bynode=colsample_bynode,
+            scale_pos_weight=xgbrf_class_weight,
+            eval_metric='logloss'
+        ),
+        xgbrf_hyperparameters,
+        resource='n_estimators',
+        factor=3,
+        min_resources=2,
+        max_resources=500,
+        scoring='roc_auc',
+        cv=3,
+        aggressive_elimination=True,
+        verbose=verbose
+    )
+
+    xgbrf_best_model = xgbrf_gridsearch.fit(
+        np.array(X_train), 
+        np.array(y_train), 
+        eval_set=[(np.array(X_val), np.array(y_val))], 
+        verbose=False
+    )
 
     xgbrf_stop = time.perf_counter()
 
-    xgbrf_model = XGBClassifier(tree_method='hist', grow_policy='depthwise', early_stopping_rounds=20, min_child_weight=min_child_weight, max_bin=max_bin, num_parallel_tree=num_parallel_tree, subsample=subsample, colsample_bytree=colsample_bytree, colsample_bynode=colsample_bynode, scale_pos_weight=xgbrf_class_weight, 
-                                eval_metric='logloss', **xgbrf_gridsearch.best_params_).fit(np.array(X_train), np.array(y_train), eval_set=[(np.array(X_val), np.array(y_val))])
+    xgbrf_model = XGBClassifier(
+        tree_method='hist',
+        grow_policy='depthwise',
+        early_stopping_rounds=20,
+        min_child_weight=min_child_weight,
+        max_bin=max_bin,
+        num_parallel_tree=num_parallel_tree,
+        subsample=subsample,
+        colsample_bytree=colsample_bytree,
+        colsample_bynode=colsample_bynode,
+        scale_pos_weight=xgbrf_class_weight,
+        eval_metric='logloss',
+        **xgbrf_gridsearch.best_params_
+    ).fit(
+        np.array(X_train), 
+        np.array(y_train), 
+        eval_set=[(np.array(X_val), np.array(y_val))]
+    )
 
-    print(f'XGBoost Random Forest model trained in {(xgbrf_stop - xgbrf_start)/60:.1f} minutes')
-    print(f'Best XGBost Random Forest parameters: {xgbrf_gridsearch.best_params_}')
+    print(f'XGBoost Random Forest model trained in {(xgbrf_stop - xgbrf_start) / 60:.1f} minutes')
+    print(f'Best XGBoost Random Forest parameters: {xgbrf_gridsearch.best_params_}')
 
-    joblib.dump(xgbrf_model, f'./census_income_xgb_model_v{sklearn.__version__}.pkl')
+    joblib.dump(xgbrf_model, os.path.relpath(f'../../census_income_xgb_model_v{sklearn.__version__}.pkl', start=start))
 
 else:
-    xgbrf_model = joblib.load(f'./census_income_xgb_model_v{sklearn.__version__}.pkl')
+    xgbrf_model = joblib.load(os.path.relpath(f'../../census_income_xgb_model_v{sklearn.__version__}.pkl', start=start))
 
 #%%
 # XGBoost Random Forest metrics
-xgbrf_train_probs = xgbrf_model.predict_proba(X_train)
-xgbrf_train_probs = xgbrf_train_probs[:, 1]
+xgbrf_train_probs = xgbrf_model.predict_proba(X_train)[:, 1]
 xgbrf_train_prec = precision_score(y_train, xgbrf_model.predict(X_train))
 xgbrf_train_recall = recall_score(y_train, xgbrf_model.predict(X_train))
 xgbrf_train_auc = roc_auc_score(y_train, xgbrf_train_probs)
 
-xgbrf_val_probs = xgbrf_model.predict_proba(X_val)
-xgbrf_val_probs = xgbrf_val_probs[:, 1]
+xgbrf_val_probs = xgbrf_model.predict_proba(X_val)[:, 1]
 xgbrf_val_prec = precision_score(y_val, xgbrf_model.predict(X_val))
 xgbrf_val_recall = recall_score(y_val, xgbrf_model.predict(X_val))
 xgbrf_val_auc = roc_auc_score(y_val, xgbrf_val_probs)
 
-print(f'Overall accuracy for XGBoost Random Forest model (training): {xgbrf_model.score(X_train, y_train):.4f}')
-print(f'Overall precision for XGBoost Random Forest model (training): {xgbrf_train_prec:.4f}')
-print(f'Overall recall for XGBoost Random Forest model (training): {xgbrf_train_recall:.4f}')
-print(f'ROC AUC for XGBoost Random Forest model (training): {xgbrf_train_auc:.4f}\n')
-print(f'Overall accuracy for XGBoost Random Forest model (validation): {xgbrf_model.score(X_val, y_val):.4f}')
-print(f'Overall precision for XGBoost Random Forest model (validation): {xgbrf_val_prec:.4f}')
-print(f'Overall recall for XGBoost Random Forest model (validation): {xgbrf_val_recall:.4f}')
-print(f'ROC AUC for XGBoost Random Forest model (validation): {xgbrf_val_auc:.4f}\n')
+print(f'Overall accuracy for XGBoost Random Forest model (training): '
+    f'{xgbrf_model.score(X_train, y_train):.4f}')
+print(f'Overall precision for XGBoost Random Forest model (training): '
+    f'{xgbrf_train_prec:.4f}')
+print(f'Overall recall for XGBoost Random Forest model (training): '
+    f'{xgbrf_train_recall:.4f}')
+print(f'ROC AUC for XGBoost Random Forest model (training): '
+    f'{xgbrf_train_auc:.4f}\n')
+print(f'Overall accuracy for XGBoost Random Forest model (validation): '
+    f'{xgbrf_model.score(X_val, y_val):.4f}')
+print(f'Overall precision for XGBoost Random Forest model (validation): '
+    f'{xgbrf_val_prec:.4f}')
+print(f'Overall recall for XGBoost Random Forest model (validation): '
+    f'{xgbrf_val_recall:.4f}')
+print(f'ROC AUC for XGBoost Random Forest model (validation): '
+    f'{xgbrf_val_auc:.4f}\n')
 
 #%%
 # Initialize KeplerMapper
 mapper = km.KeplerMapper(verbose=1)
 
 #%%
+# Train Gower distance matrix
+X_train_gower = gower.gower_matrix(X_train)
+
+#%%
 # Create 2-D lens with XGBoost Random Forest and L2-norm
 lens_1 = xgbrf_model.predict_proba(X_train)[:,1].reshape((X_train.shape[0], 1))
 lens_2 = mapper.fit_transform(X_train, projection='l2norm')
 lenses = np.c_[lens_1, lens_2]
-
-#%%
-X_train_gower = gower.gower_matrix(X_train)
 
 #%%
 # Create the Kepler Mapper graph
