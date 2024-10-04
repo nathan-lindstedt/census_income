@@ -153,6 +153,7 @@ def logistic_pca(X: np.ndarray, num_components: int=None, num_iter: int=50, lamb
             H = np.sum(2*lam_i*E_zhzh, axis=2)
             g = mm(E_zh, X[:, i] - 0.5)
             
+            # L1 regularization (experimental)
             if lambda_l1 is not None:
                 g[:-1] += lambda_l1 * np.sign(W[i, :])
                 g[-1] += lambda_l1 * np.sign(b[i])
@@ -168,7 +169,7 @@ def logistic_pca(X: np.ndarray, num_components: int=None, num_iter: int=50, lamb
     return W, mu, b
 
 
-def pca(X: np.ndarray, num_components: int = None, zero_mean: bool = True) -> tuple[np.ndarray, np.ndarray]:
+def pca(X: np.ndarray, num_components: int=None, zero_mean: bool=True) -> tuple[np.ndarray, np.ndarray]:
     """Principal component analysis (PCA).
 
     Parameters

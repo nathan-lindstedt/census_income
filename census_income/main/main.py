@@ -72,7 +72,7 @@ X = helper_funcs.feature_names(X_feat_names, X_prep, X)
 #%%
 # Logistic PCA for categorical variables
 for label in X_hot_vars:
-    mu = helper_funcs.logistic_pca(X.loc[:, X.columns.str.startswith(label)].to_numpy(), num_iter=75)[1]
+    mu = helper_funcs.logistic_pca(X.loc[:, X.columns.str.startswith(label)].to_numpy(), num_iter=50)[1]
     X.drop(X.loc[:, X.columns.str.startswith(label)], inplace=True, axis=1)
     X[label] = mu[0].reshape(-1,1)
 
@@ -223,7 +223,7 @@ lenses = np.c_[lens_1, lens_2]
 graph = mapper.map(
     lenses,
     X_train,
-    cover=km.Cover(n_cubes=20, perc_overlap=.10),
+    cover=km.Cover(n_cubes=20, perc_overlap=.20),
     clusterer=AgglomerativeClustering(metric='l2', linkage='average', n_clusters=2)
 )
 
