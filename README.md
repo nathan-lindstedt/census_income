@@ -7,4 +7,6 @@ Topological data analysis (TDA) is a group of methods and techniques that can be
 
 ![scikit_tda_img](./census_income/images/scikit_tda_img.png)
 
+Dataset Citation:
+
 B. Becker and R. Kohavi. "Census Income," UCI Machine Learning Repository, 1996. [Online]. Available: https://doi.org/10.24432/C5GP7S.
