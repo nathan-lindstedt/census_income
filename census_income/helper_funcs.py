@@ -149,14 +149,15 @@ def logistic_pca(X: np.ndarray, num_components: int=None, num_iter: int=50, lamb
             # Compute approximation
             lam_i = lam(xi[:, i])[None][None]
             
-            # Gradient and Hessian
-            H = np.sum(2*lam_i*E_zhzh, axis=2)
-            g = mm(E_zh, X[:, i] - 0.5)
+            # Hessian and gradient
+            if lambda_l1 is None:
+                H = np.sum(2*lam_i*E_zhzh, axis=2)
+                g = mm(E_zh, X[:, i] - 0.5) 
             
-            # L1 regularization (experimental)
-            if lambda_l1 is not None:
-                g[:-1] += lambda_l1 * np.sign(W[i, :])
-                g[-1] += lambda_l1 * np.sign(b[i])
+            # Hessian and gradient w/ L1 regularization (experimental)
+            else:
+                H = np.sum(2*lam_i*E_zhzh, axis=2)
+                g = mm(E_zh, X[:, i] - 0.5) - lambda_l1 * np.sign(np.append(W[i, :], b[i]))
             
             # Invert Hessian
             wh_i = -solve(H, g[:, None])
