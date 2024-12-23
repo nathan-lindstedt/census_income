@@ -292,3 +292,5 @@ w.find_failure_groups(
 #%%
 # Open Cobalt visualization UI
 w.ui
+
+#%%

@@ -87,6 +87,7 @@ dependencies:
     - bottleneck==1.3.7
     - celluloid==0.2.0
     - certifi==2024.8.30
+    - cobalt-ai==0.3.6
     - contourpy==1.2.0
     - cycler==0.12.1
     - cython==3.0.11
