@@ -7,6 +7,12 @@ Topological data analysis (TDA) is a group of methods and techniques that can be
 
 ![scikit_tda_img](./census_income/images/scikit_tda_img.png)
 
+Figure 1. XGBoost model error mapping using Scikit-TDA package (see: https://github.com/scikit-tda)
+
+![cobalt_tda_img](census_income/images/cobalt_tda_img.png)
+
+Figure 2. XGBoost model error mapping using Cobalt package (see: https://github.com/BlueLightAI)
+
 Dataset Citation:
 
 Becker, B. and R. Kohavi. "Census Income," UCI Machine Learning Repository, 1996. [Online]. Available: https://doi.org/10.24432/C5GP7S.

@@ -8,6 +8,7 @@ from typing import List
 import kmapper as km
 import numpy as np
 import pandas as pd
+import cobalt
 import gower
 import sklearn
 
@@ -23,6 +24,15 @@ from xgboost import XGBClassifier
 from census_income import helper_funcs
 
 #%%
+# Setup Cobalt
+# Note: Uncomment the following line and run on first-time use. Cobalt is free to use for 
+# noncommercial purposes. You can register for a noncommercial license or a trial commercial 
+# license with the built-in setup tool. Follow the instructions in the terminal or interactive 
+# window to complete the setup (https://docs.cobalt.bluelightai.com/setup.html).
+
+# cobalt.register_license()
+
+#%%s
 # System path variables
 start: str = os.path.dirname(__file__)
 
@@ -241,3 +251,44 @@ mapper.visualize(
 )
 
 #%%
+# Prepare Cobalt dataframe
+cobalt_df = pd.DataFrame(X)
+y_pred = pd.DataFrame(xgbrf_model.predict(X))
+cobalt_df['y_true'] = pd.Series(y[0].astype(bool), dtype='category')
+cobalt_df['y_pred'] = pd.Series(y_pred[0].astype(bool), dtype='category')
+
+#%%
+# Cobalt initialization and model evaluation
+ds = cobalt.CobaltDataset(cobalt_df)
+
+ds.add_model(
+    input_columns=X_feat_names,
+    target_column='y_true',
+    prediction_column='y_pred',
+    task="classification",
+    name="xgbrf",
+)
+
+ds.compute_model_performance_metrics()
+
+#%%
+# Create Cobalt embedding
+xgbrf_emb = xgbrf_model.apply(X)
+ds.add_embedding_array(xgbrf_emb, metric='euclidean', name='xgbrf_emb')
+
+#%%
+# Instantiate Cobalt workspace
+split = cobalt.DatasetSplit(ds, {'train': X_train.index, 'val': X_val.index, 'test': X_test.index})
+w = cobalt.Workspace(ds, split)
+
+#%%
+# Find Cobalt failure groups
+w.find_failure_groups(
+    run_name="xgbrf_failures",
+    failure_metric="error",
+    config={"threshold": 0.3}
+)
+
+#%%
+# Open Cobalt visualization UI
+w.ui
