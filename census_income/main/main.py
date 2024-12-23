@@ -179,6 +179,7 @@ print(f'Overall recall for XGBoost Random Forest model (training): '
     f'{xgbrf_train_recall:.4f}')
 print(f'ROC AUC for XGBoost Random Forest model (training): '
     f'{xgbrf_train_auc:.4f}\n')
+
 print(f'Overall accuracy for XGBoost Random Forest model (validation): '
     f'{xgbrf_model.score(X_val, y_val):.4f}')
 print(f'Overall precision for XGBoost Random Forest model (validation): '
