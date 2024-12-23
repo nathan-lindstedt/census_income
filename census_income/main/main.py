@@ -189,6 +189,7 @@ print(f'Overall recall for XGBoost Random Forest model (training): '
     f'{xgbrf_train_recall:.4f}')
 print(f'ROC AUC for XGBoost Random Forest model (training): '
     f'{xgbrf_train_auc:.4f}\n')
+
 print(f'Overall accuracy for XGBoost Random Forest model (validation): '
     f'{xgbrf_model.score(X_val, y_val):.4f}')
 print(f'Overall precision for XGBoost Random Forest model (validation): '
@@ -252,9 +253,14 @@ mapper.visualize(
 
 #%%
 # Prepare Cobalt dataframe
-cobalt_df = pd.DataFrame(X)
-y_pred = pd.DataFrame(xgbrf_model.predict(X))
-cobalt_df['y_true'] = pd.Series(y[0].astype(bool), dtype='category')
+X_cobalt = X_train.reset_index(drop=True)
+y_cobalt = y_train.reset_index(drop=True)
+
+cobalt_df = pd.DataFrame(X_cobalt).reset_index(drop=True)
+y_true = pd.DataFrame(y_cobalt).reset_index(drop=True)
+y_pred = pd.DataFrame(xgbrf_model.predict(X_cobalt)).reset_index(drop=True)
+
+cobalt_df['y_true'] = pd.Series(y_true[0].astype(bool), dtype='category')
 cobalt_df['y_pred'] = pd.Series(y_pred[0].astype(bool), dtype='category')
 
 #%%
@@ -273,12 +279,12 @@ ds.compute_model_performance_metrics()
 
 #%%
 # Create Cobalt embedding
-xgbrf_emb = xgbrf_model.apply(X)
+xgbrf_emb = xgbrf_model.apply(X_cobalt)
 ds.add_embedding_array(xgbrf_emb, metric='euclidean', name='xgbrf_emb')
 
 #%%
 # Instantiate Cobalt workspace
-split = cobalt.DatasetSplit(ds, {'train': X_train.index, 'val': X_val.index, 'test': X_test.index})
+split = cobalt.DatasetSplit(ds, {'train': X_cobalt.index})
 w = cobalt.Workspace(ds, split)
 
 #%%
