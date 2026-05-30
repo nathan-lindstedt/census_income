@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
-from numpy.linalg import inv, solve
-from numpy import matmul as mm
 from typing import List
 from sklearn.compose import ColumnTransformer
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 
 def feature_names(X_names_list: List[str], X_transformer: ColumnTransformer, X: np.ndarray) -> pd.DataFrame:
     """
@@ -42,201 +42,87 @@ def feature_names(X_names_list: List[str], X_transformer: ColumnTransformer, X: 
     return pd.DataFrame(X, columns=X_names_list)
 
 
-def logistic_pca(X: np.ndarray, num_components: int=None, num_iter: int=50, lambda_l1: float=None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Logistic principal component analysis (PCA) w/ optional
-    L1 regularization for inducing sparsity (experimental).
+def famd_fit(X_train: pd.DataFrame, X_hot_vars: List[str]) -> tuple:
+    """Fit FAMD (Factor Analysis of Mixed Data) on training data.
+
+    Normalises OHE binary columns using the Greenacre method — centering
+    each column by its proportion p_j and scaling by the binomial standard
+    deviation sqrt(p_j * (1 - p_j)) — then standardises continuous columns
+    as in PCA, and applies SVD to the combined normalised matrix. Returns
+    the first component scores for the training set together with all fitted
+    objects needed to project new data.
 
     Parameters
     ----------
-    X : (num_samples, num_dimensions) ndarray
-        Data matrix.
-    num_components : int, optional
-        Number of PCA components.
-    num_iter : int, default=50
-        Number iterations for fitting model.
-    lambda_l1 : float, optional
-        L1 regularization parameter (experimental).
+    X_train : pd.DataFrame
+        Training feature matrix with OHE binary and continuous columns.
+    X_hot_vars : List[str]
+        Original categorical variable names before OHE, used to identify
+        which columns in X_train are OHE-encoded binary indicators.
 
     Returns
-    ----------
-    W : (num_dimensions, num_components) ndarray
-        Estimated projection matrix.
-    mu : (num_components, num_samples) ndarray
-        Estimated latent variables.
-    b : (num_dimensions, 1) ndarray
-        Estimated bias.
-
-    References
-    ----------
-    Tipping, Michael E. "Probabilistic visualisation of high-dimensional binary data." 
-    Advances in neural information processing systems (1999): 592-598.
-
-    Lee, Seokho, Jianhua Z. Huang, and Jianhua Hu. "Sparse logistic principal components analysis for binary data."
-    The Annals of Applied Statistics 4.3 (2010): 1579-1601.
-
-    Copyright (c) 2021 Mikael Brudfors under MIT License
+    -------
+    lens : (n_train, 1) ndarray
+        First FAMD component scores for the training set.
+    ohe_cols : List[str]
+        OHE column names identified in X_train.
+    cont_cols : List[str]
+        Continuous column names in X_train.
+    p_j : (n_ohe,) ndarray
+        Column proportions used for Greenacre normalisation.
+    scaler : StandardScaler
+        Fitted scaler for continuous columns.
+    pca : PCA
+        Fitted PCA(n_components=1) whose loadings define the FAMD axis.
     """
-    num_samples: int = X.shape[0]
-    num_dimensions: int = X.shape[1]
-    num_components: int = _get_num_components(num_components, num_samples, num_dimensions)
-    
-    # Constants
-    N: int = num_samples
-    D: int = num_dimensions
-    K: int = num_components
-    
-    # Initialize variables
-    # I: Identity matrix
-    I: np.ndarray = np.eye(K)
-    # W: Projection matrix
-    W: np.ndarray = np.random.randn(D, K)
-    # mu: Latent variables
-    mu: np.ndarray = np.random.randn(K, N)
-    # b: Bias
-    b: np.ndarray = np.random.randn(D, 1)
-    # C: Covariance matrix
-    C: np.ndarray = np.repeat(I[:, :, np.newaxis], N, axis=2)
-    # xi: Variational parameters
-    xi: np.ndarray = np.ones((N, D))
-    
-    # Functions
-    # Sigmoid and lambda function
-    sig = lambda x: 1/(1 + np.exp(-x))
-    lam = lambda x: (0.5 - sig(x))/(2*x)
-    
-    # Fit model
-    for iter in range(num_iter):
-        # Step 1. Obtain the sufficient statistics for the approximated posterior 
-        # distribution of latent variables given each observation
-        for n in range(N):
-            # Get sample
-            x_n = X[n, :][:, None]
-           
-            # Compute approximation
-            lam_n = lam(xi[n, :])[:, None]
-            
-            # Update covariance matrix and latent variables
-            C[:, :, n] = inv(I - 2*mm(W.T, lam_n*W))
-            mu[:, n] = mm(C[:, :, n], mm(W.T, x_n - 0.5 + 2*lam_n*b))[:, 0]
-        
-        # Step 2. Optimise the variational parameters in in order to make the 
-        # approximation as close as possible
-        for n in range(N):
-            # Posterior statistics
-            z = mu[:, n][:, None]
-            E_zz = C[:, :, n] + mm(z, z.T)
-            
-            # Variational parameters xi squared
-            xixi = np.sum(W*mm(W, E_zz), axis=1, keepdims=True) \
-                   + 2*b*mm(W, z) + b**2
+    ohe_cols = [col for col in X_train.columns
+                if any(col.startswith(label + '_') for label in X_hot_vars)]
+    cont_cols = [col for col in X_train.columns if col not in ohe_cols]
 
-            # Update variational parameters
-            xi[n, :] = np.sqrt(np.abs(xixi[:, 0]))
-        
-        # Step 3. Update model parameters
-        E_zhzh = np.zeros((K + 1, K + 1, N))
+    Z_train = X_train[ohe_cols].values
+    p_j = np.clip(Z_train.mean(axis=0), 1e-10, 1 - 1e-10)
+    Z_norm = (Z_train - p_j) / np.sqrt(p_j * (1 - p_j))
 
-        for n in range(N):
-            z = mu[:, n][:, None]
-            E_zhzh[:-1, :-1, n] = C[:, :, n] + mm(z, z.T)
-            E_zhzh[:-1, -1, n] = z[:, 0]
-            E_zhzh[-1, :-1, n] = z[:, 0]
-            E_zhzh[-1, -1, n] = 1
-        
-        E_zh = np.append(mu, np.ones((1, N)), axis=0)
-        
-        for i in range(D):
-            # Compute approximation
-            lam_i = lam(xi[:, i])[None][None]
-            
-            # Hessian and gradient
-            if lambda_l1 is None:
-                H = np.sum(2*lam_i*E_zhzh, axis=2)
-                g = mm(E_zh, X[:, i] - 0.5) 
-            
-            # Hessian and gradient w/ L1 regularization (experimental)
-            else:
-                H = np.sum(2*lam_i*E_zhzh, axis=2)
-                g = mm(E_zh, X[:, i] - 0.5) - lambda_l1 * np.sign(np.append(W[i, :], b[i]))
-            
-            # Invert Hessian
-            wh_i = -solve(H, g[:, None])
-            wh_i = wh_i[:, 0]
-            
-            # Update the projection matrix and bias
-            W[i, :] = wh_i[:K]
-            b[i] = wh_i[K]
+    scaler = StandardScaler()
+    C_norm = scaler.fit_transform(X_train[cont_cols].values)
 
-    return W, mu, b
+    pca = PCA(n_components=1)
+    lens = pca.fit_transform(np.hstack([Z_norm, C_norm]))
+
+    return lens, ohe_cols, cont_cols, p_j, scaler, pca
 
 
-def pca(X: np.ndarray, num_components: int=None, zero_mean: bool=True) -> tuple[np.ndarray, np.ndarray]:
-    """Principal component analysis (PCA).
+def famd_transform(X_new: pd.DataFrame, ohe_cols: List[str], cont_cols: List[str],
+                   p_j: np.ndarray, scaler: StandardScaler, pca: PCA) -> np.ndarray:
+    """Project new data onto a fitted FAMD axis.
+
+    Applies the same Greenacre normalisation (using the training proportions
+    p_j) and StandardScaler fitted by famd_fit, then projects through the
+    stored PCA loadings. This places new observations in the same factor
+    space as the training set without refitting the decomposition.
 
     Parameters
     ----------
-    X : (num_samples, num_dimensions) ndarray
-        Data matrix.
-    num_components : int, optional
-        Number of PCA components.
-    zero_mean : bool, default=True
-        Zero mean data.
+    X_new : pd.DataFrame
+        Feature matrix with the same OHE and continuous columns as the
+        training data used in famd_fit.
+    ohe_cols : List[str]
+        OHE column names (returned by famd_fit).
+    cont_cols : List[str]
+        Continuous column names (returned by famd_fit).
+    p_j : (n_ohe,) ndarray
+        Column proportions for Greenacre normalisation (returned by famd_fit).
+    scaler : StandardScaler
+        Fitted scaler for continuous columns (returned by famd_fit).
+    pca : PCA
+        Fitted PCA(n_components=1) (returned by famd_fit).
 
     Returns
-    ----------
-    W : (num_dimensions, num_components) ndarray
-        Principal axes.        
-    mu : (num_components, ) ndarray
-        Principal components.    
-
-    Copyright (c) 2021 Mikael Brudfors under MIT License
+    -------
+    lens : (n_new, 1) ndarray
+        First FAMD component scores for the new observations.
     """
-    num_samples: int = X.shape[0]
-    num_dimensions: int = X.shape[1]
-    num_components: int = _get_num_components(num_components, num_samples, num_dimensions)
-    
-    # Zero mean data
-    if zero_mean:     
-        X -= np.mean(X, axis=0)  
-    
-    # Compute covariance matrix
-    X = np.cov(X, rowvar=False)
-    
-    # Eigen decomposition
-    mu: np.ndarray
-    W: np.ndarray
-    mu, W = np.linalg.eig(X)
-    
-    # Sort descending order
-    idx: np.ndarray = np.argsort(mu)[::-1]
-    W = W[:, idx]
-    mu = mu[idx]
-    
-    # Extract components
-    mu = mu[:num_components]
-    W = W[:, :num_components]
-
-    return W, mu
-    
-    
-def _get_num_components(num_components: int, num_samples: int, num_dimensions: int) -> int:
-    """Get number of components (clusters).
-
-    Parameters
-    ----------
-    num_components : int
-        Number of PCA components.
-    num_samples : int
-        Number of samples in the dataset.
-    num_dimensions : int
-        Number of dimensions in the dataset.
-
-    Returns
-    ----------
-    num_components : int
-        Number of components to use.
-    """
-    if num_components is None:
-        num_components = min(num_samples, num_dimensions)    
-
-    return num_components
+    Z_new = X_new[ohe_cols].values
+    Z_norm = (Z_new - p_j) / np.sqrt(p_j * (1 - p_j))
+    C_norm = scaler.transform(X_new[cont_cols].values)
+    return pca.transform(np.hstack([Z_norm, C_norm]))
